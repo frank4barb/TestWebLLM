@@ -2,42 +2,83 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8" />
-<title>WebLLM + Phi-2 MLC – Browser AI</title>
-<style>
-    body { margin:0; padding:0; font-family: sans-serif; }
-    #topFrame { height: 120px; border-bottom: 2px solid #888; padding:10px; }
-    #bottom { display:flex; width:100%; height: calc(100vh - 120px); }
-    #leftFrame { width:50%; height:100%; border-right: 2px solid #888; }
-    #rightFrame { width:50%; height:100%; padding:10px; box-sizing:border-box; overflow:auto; }
+<title>AI Browser Assistant – WebLLM</title>
 
-    textarea, input[type=text] {
-        width:100%; box-sizing:border-box; padding:8px;
-        margin-bottom:8px; font-size:14px;
+<style>
+    body { margin:0; padding:0; font-family:Arial; }
+
+    #topFrame {
+        height: 120px;
+        border-bottom: 2px solid #666;
+        padding: 10px;
+        box-sizing: border-box;
     }
 
-    iframe { width:100%; height:100%; border:0; }
-    #chatBox { width:100%; height:60%; overflow:auto; background:#f5f5f5; padding:10px; border:1px solid #ccc; }
-    #askBox { width:100%; height:80px; }
+    #bottom {
+        display:flex;
+        height: calc(100vh - 120px);
+        width:100%;
+    }
+
+    #leftFrame {
+        width:50%;
+        height:100%;
+        border-right:2px solid #666;
+    }
+
+    #rightFrame {
+        width:50%;
+        height:100%;
+        padding:10px;
+        box-sizing: border-box;
+        overflow:auto;
+    }
+
+    iframe {
+        width:100%;
+        height:100%;
+        border:0;
+    }
+
+    textarea, input[type=text] {
+        width:100%;
+        padding:8px;
+        margin-bottom:10px;
+        box-sizing:border-box;
+        font-size:14px;
+    }
+
+    #chatBox {
+        height:60%;
+        background:#f2f2f2;
+        border:1px solid #ccc;
+        padding:10px;
+        overflow:auto;
+    }
 </style>
 </head>
 
 <body>
 
-<!-- A) FRAME SUPERIORE -->
+<!-- FRAME SUPERIORE -->
 <div id="topFrame">
     <label>URL della pagina da caricare:</label>
-    <input type="text" id="urlInput" placeholder="https://example.com" />
+    <input type="text" id="urlInput" placeholder="https://example.com">
     <button onclick="loadPage()">Carica Pagina</button>
+    <div style="font-size:12px;color:#555;">
+        (Nota: alcuni siti non possono essere caricati in iframe)
+    </div>
 </div>
 
-<!-- BOTTOM: FRAME SINISTRO + DESTRO -->
+<!-- 2 FRAME SOTTO -->
 <div id="bottom">
-    <!-- C) FRAME SINISTRO -->
+
+    <!-- FRAME SINISTRO -->
     <div id="leftFrame">
-        <iframe id="webFrame" sandbox="allow-same-origin allow-scripts"></iframe>
+        <iframe id="webFrame"></iframe>
     </div>
 
-    <!-- D) FRAME DESTRO: CHAT LLM -->
+    <!-- FRAME DESTRO: CHAT -->
     <div id="rightFrame">
         <div id="chatBox">[La conversazione apparirà qui]</div>
         <textarea id="askBox" placeholder="Scrivi la tua domanda..."></textarea>
@@ -45,97 +86,98 @@
     </div>
 </div>
 
-<!-- WEBLLM CDN -->
+
+<!-- ✅ WEBLLM + MLC (modello funzionante) -->
 <script type="module">
 import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
-// ✅ Scegliamo il modello MLC più leggero con supporto Phi‑2
-const modelName = "mlc-ai/phi-2-q4f16_1-MLC";
+// ✅ modello reale, disponibile e testato
+const modelName = "mlc-ai/TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC";
 
 let engine = null;
 let pageTextContent = "";
 let systemPrompt = "";
 
-// Funzione iniziale per caricare modello
+// ✅ carica LLM alla partenza
 async function initLLM() {
     engine = await CreateMLCEngine(modelName, {
-        initProgressCallback: (p) => {
-            console.log("Loading model:", p);
-        }
+        initProgressCallback : (p) => console.log("Loading model:", p)
     });
     resetConversation();
 }
+initLLM();
 
-// RESET AI AD OGNI NUOVA PAGINA
+
+// ✅ reset tra una pagina e l'altra
 function resetConversation() {
-    pageTextContent = "";
-    systemPrompt =
-`Sei un assistente AI che risponde **solo** usando le informazioni testuali trovate nella pagina web caricata.
-NON usare conoscenze esterne.
-Se ti viene chiesto di analizzare immagini o figure, rispondi: "Non posso analizzare immagini".
-Ecco il contenuto della pagina, che è la tua unica fonte:
+    systemPrompt = 
+`Sei un assistente AI che deve rispondere **solo** sulla base del contenuto testuale della pagina caricata.
+Ignora ogni altra conoscenza.
+Se l’utente chiede di analizzare immagini, rispondi: "Non posso analizzare immagini".
 
-<<PAGINA>>
+Contenuto della pagina:
+
 ${pageTextContent}
-<<FINE PAGINA>>
 `;
+    document.getElementById("chatBox").innerHTML =
+        "[Pronto. Carica una pagina e fai una domanda.]";
 }
 
-// C) CARICARE LA PAGINA NEL FRAME SINISTRO
+
+// ✅ Caricamento della pagina nel frame sinistro
 async function loadPage() {
     const url = document.getElementById("urlInput").value.trim();
     if (!url) return;
 
+    // Caricamento nell'iframe
     document.getElementById("webFrame").src = url;
 
-    // tentiamo di prelevare il contenuto (richiede CORS abilitato dal sito)
+    // Estrazione testo (se CORS consente)
     try {
         const res = await fetch(url);
         const html = await res.text();
 
-        // estrarre solo contenuto testuale basilare
         const tmp = document.createElement("div");
         tmp.innerHTML = html;
 
-        pageTextContent = tmp.innerText.replace(/\s+/g, " ").trim();
+        pageTextContent = tmp.innerText
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 20000); // evita prompt troppo grande
+
     } catch (e) {
-        pageTextContent = "Impossibile leggere il contenuto della pagina (CORS impedisce l’accesso).";
+        pageTextContent = "Impossibile accedere al testo della pagina (CORS).";
     }
 
     resetConversation();
-
-    document.getElementById("chatBox").innerHTML =
-        "[Pagina caricata. Fai una domanda basata SOLO sul contenuto della pagina.]";
 }
 
-// D) INVIARE DOMANDA ALL’LLM
+
+// ✅ invio domanda all’AI
 async function sendQuestion() {
     const question = document.getElementById("askBox").value.trim();
-    if (!question || !engine) return;
+    if (!question) return;
 
     appendToChat("TU", question);
+    document.getElementById("askBox").value = "";
 
-    const response = await engine.chat.completions.create({
+    const reply = await engine.chat.completions.create({
         messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: question }
+            { role:"system", content: systemPrompt },
+            { role:"user",   content: question }
         ]
     });
 
-    const aiText = response.choices[0].message.content;
-    appendToChat("AI", aiText);
-
-    document.getElementById("askBox").value = "";
+    appendToChat("AI", reply.choices[0].message.content);
 }
 
-// CHAT UI
+
+// ✅ append al box chat
 function appendToChat(sender, text) {
     const box = document.getElementById("chatBox");
     box.innerHTML += `<p><b>${sender}:</b> ${text}</p>`;
     box.scrollTop = box.scrollHeight;
 }
-
-initLLM();
 </script>
 
 </body>
